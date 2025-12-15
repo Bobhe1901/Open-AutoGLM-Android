@@ -48,6 +48,7 @@ Download the APK file from the Releases page and install it on your Android devi
 2. Find "AutoGLM Android" in the system accessibility settings
 3. Enable the accessibility service
 4. Return to the app and confirm the status shows "Enabled"
+5. In system settings, set this app's **battery usage/battery policy** to **Unrestricted/Not restricted** to prevent the system from killing background tasks
 
 ### 4. Start Using
 
@@ -101,6 +102,7 @@ A: Possible reasons:
 - API Key configuration is incorrect
 - Network connection issues
 - Task description is not clear enough
+ - The system's battery optimization for this app is not set to "Unrestricted", causing background tasks to be killed
 
 ### Q: How can I view the AI's thinking process?
 
