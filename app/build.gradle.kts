@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.example.open_autoglm_android"
     compileSdk = 36
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.example.open_autoglm_android"
@@ -54,6 +55,12 @@ android {
                 "proguard-rules.pro"
             )
             // 只有在签名配置存在时才使用
+            if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            // 为debug版本也添加签名，以便在Android 7.0+上正常安装
             if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
                 signingConfig = signingConfigs.getByName("release")
             }

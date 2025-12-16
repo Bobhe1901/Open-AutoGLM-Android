@@ -207,4 +207,25 @@ class AutoGLMAccessibilityService : AccessibilityService() {
             false
         }
     }
+    
+    /**
+     * 同步获取当前应用包名
+     */
+    fun getCurrentAppPackageName(): String? {
+        return _currentApp.value
+    }
+    
+    /**
+     * 同步获取当前应用包名（兼容ChatViewModel中的调用）
+     */
+    fun getCurrentApp(): String? {
+        return _currentApp.value
+    }
+    
+    /**
+     * 同步截图方法（兼容ChatViewModel中的调用）
+     */
+    suspend fun takeScreenshot(): Bitmap? {
+        return takeScreenshotSuspend()
+    }
 }

@@ -23,26 +23,31 @@ class ModelClient(
     private val api: AutoGLMApi
     
     init {
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
+        // 硬编码baseUrl
+        val fixedBaseUrl = "https://open.bigmodel.cn/api/paas/v4"
+        
+        val loggingInterceptor = HttpLoggingInterceptor { message ->
+            Log.d("ModelClient", message)
+        }.apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
         
-        val client = OkHttpClient.Builder()
+        val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(120, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
         
         val retrofit = Retrofit.Builder()
-            .baseUrl(baseUrl.ensureTrailingSlash())
-            .client(client)
+            .baseUrl(fixedBaseUrl.ensureTrailingSlash())
+            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
         
         api = retrofit.create(AutoGLMApi::class.java)
     }
-    
+
     /**
      * 请求模型（使用消息上下文）
      */
@@ -51,8 +56,12 @@ class ModelClient(
         modelName: String,
         apiKey: String
     ): ModelResponse {
+        // 硬编码API Key和Model Name
+        val fixedApiKey = "2b55beee279d437ea8c7460e29bc12b0.X0JeFydsJjZjp4Rf"
+        val fixedModelName = "autoglm-phone"
+        
         val request = ChatRequest(
-            model = modelName,
+            model = fixedModelName,
             messages = messages,
             maxTokens = 3000,
             temperature = 0.0,
@@ -61,11 +70,7 @@ class ModelClient(
             stream = false
         )
         
-        val authHeader = if (apiKey.isNotEmpty() && apiKey != "EMPTY") {
-            "Bearer $apiKey"
-        } else {
-            "Bearer EMPTY"
-        }
+        val authHeader = "Bearer $fixedApiKey"
         
         val response = api.chatCompletion(authHeader, request)
         
@@ -247,61 +252,69 @@ class ModelClient(
     }
     
     
+    /**
+     * 创建工具消息（添加到上下文）
+     */
+    fun createToolMessage(content: String): ChatMessage {
+        return ChatMessage(
+            role = "tool",
+            content = listOf(ContentItem(type = "text", text = content))
+        )
+    }
+    
+    /**
+     * 解析模型响应
+     */
     private fun parseResponse(content: String): ModelResponse {
-        Log.d("ModelClient", "解析响应内容: ${content.take(500)}")
+        // 提取思考和动作部分
+        val thinkRegex = "<think>(.*?)</think>".toRegex(RegexOption.DOT_MATCHES_ALL)
+        val answerRegex = "<answer>(.*?)</answer>".toRegex(RegexOption.DOT_MATCHES_ALL)
         
-        // 对齐 Python 版本的解析逻辑：优先按 finish/do 分割，其次 <answer>，最后兜底
-        var thinking = ""
-        var action = ""
+        val think = thinkRegex.find(content)?.groupValues?.get(1)?.trim() ?: ""
+        val action = answerRegex.find(content)?.groupValues?.get(1)?.trim() ?: content
         
-        // 规则 1：finish(message= ... )
-        if (content.contains("finish(message=")) {
-            val parts = content.split("finish(message=", limit = 2)
-            thinking = parts[0].trim()
-            action = "finish(message=" + parts[1]
-            Log.d("ModelClient", "按 finish(message= 分割得到 action: $action")
-        }
-        // 规则 2：do(action= ... )
-        else if (content.contains("do(action=")) {
-            val parts = content.split("do(action=", limit = 2)
-            thinking = parts[0].trim()
-            action = "do(action=" + parts[1]
-            Log.d("ModelClient", "按 do(action= 分割得到 action: $action")
-        }
-        // 规则 3：<answer> 标签
-        else if (content.contains("<answer>")) {
-            val parts = content.split("<answer>", limit = 2)
-            thinking = parts[0]
-                .replace("<think>", "")
-                .replace("</think>", "")
-                .replace("<redacted_reasoning>", "")
-                .replace("</redacted_reasoning>", "")
-                .trim()
-            action = parts[1].replace("</answer>", "").trim()
-            Log.d("ModelClient", "按 <answer> 标签解析 action: $action")
-        }
-        // 规则 4：兜底
-        else {
-            action = content.trim()
-            Log.w("ModelClient", "未命中任何标记，使用全文作为 action")
-        }
+        return ModelResponse(think, action)
+    }
+    
+    /**
+     * 解析模型响应（与createAssistantMessage配合使用）
+     */
+    fun parseModelResponse(responseContent: String): Pair<String, String> {
+        val modelResponse = parseResponse(responseContent)
+        return Pair(modelResponse.thinking, modelResponse.action)
+    }
+    
+    /**
+     * 请求模型（使用消息上下文）
+     */
+    suspend fun chat(
+        messages: List<ChatMessage>,
+        model: String,
+        apiKey: String
+    ): ChatResponse? {
+        // 硬编码API Key和Model Name
+        val fixedApiKey = "2b55beee279d437ea8c7460e29bc12b0.X0JeFydsJjZjp4Rf"
+        val fixedModelName = "autoglm-phone"
         
-        // 补充：如果 action 仍非 do/finish 且不是 JSON，尝试从正文中再提取一次
-        if (!action.startsWith("{") && !action.startsWith("do(") && !action.startsWith("finish(")) {
-            val funcMatch = Regex("""(do|finish)\s*\([^)]+\)""", RegexOption.IGNORE_CASE).find(content)
-            if (funcMatch != null) {
-                action = funcMatch.value
-                Log.d("ModelClient", "回退从正文提取函数调用: $action")
-            } else {
-                val extractedJson = extractJsonFromContent(content)
-                if (extractedJson.isNotEmpty()) {
-                    action = extractedJson
-                    Log.d("ModelClient", "回退从正文提取 JSON: $action")
-                }
-            }
-        }
+        val request = ChatRequest(
+            model = fixedModelName,
+            messages = messages,
+            maxTokens = 3000,
+            temperature = 0.0,
+            topP = 0.85,
+            frequencyPenalty = 0.2,
+            stream = false
+        )
         
-        return ModelResponse(thinking = thinking, action = action)
+        val authHeader = "Bearer $fixedApiKey"
+        
+        val response = api.chatCompletion(authHeader, request)
+        
+        if (response.isSuccessful && response.body() != null) {
+            return response.body()
+        } else {
+            throw Exception("API request failed: ${response.code()} ${response.message()}")
+        }
     }
     
     /**

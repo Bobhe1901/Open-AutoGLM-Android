@@ -11,193 +11,148 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    modifier: Modifier = Modifier
+    navController: NavController
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState = viewModel.uiState.collectAsState().value
     val context = LocalContext.current
     
-    // 当屏幕可见时检查服务状态
-    LaunchedEffect(Unit) {
-        viewModel.checkAccessibilityService()
-    }
-    
-    // 使用 DisposableEffect 在每次进入设置页面时刷新状态
-    DisposableEffect(Unit) {
-        viewModel.checkAccessibilityService()
-        onDispose { }
-    }
-    
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "设置",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        
-        // 无障碍服务状态
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (uiState.isAccessibilityEnabled) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.errorContainer
-                }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("设置") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White
+                )
             )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
+            // 无障碍服务状态卡片
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(bottom = 16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
                 ) {
-                    Column {
-                        Text(
-                            text = "无障碍服务",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = if (uiState.isAccessibilityEnabled) {
-                                "已启用"
-                            } else {
-                                "未启用 - 点击前往设置"
-                            },
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (!uiState.isAccessibilityEnabled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "无障碍服务",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            Text(
+                                text = if (uiState.isAccessibilityEnabled) {
+                                    "已启用"
+                                } else {
+                                    "未启用"
+                                },
+                                color = if (uiState.isAccessibilityEnabled) {
+                                    Color.Green
+                                } else {
+                                    Color.Red
+                                },
+                                fontSize = 16.sp
+                            )
+                        }
                         Button(
                             onClick = {
+                                // 跳转到系统无障碍设置
                                 val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                                 context.startActivity(intent)
                             }
                         ) {
-                            Text("前往设置")
+                            Text(text = "前往设置")
                         }
                     }
                 }
             }
-        }
-        
-        Divider()
-        
-        // API Key 设置
-        OutlinedTextField(
-            value = uiState.apiKey,
-            onValueChange = { viewModel.updateApiKey(it) },
-            label = { Text("API Key") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = { Text("输入你的 API Key") }
-        )
-        
-        // Base URL 设置
-        OutlinedTextField(
-            value = uiState.baseUrl,
-            onValueChange = { viewModel.updateBaseUrl(it) },
-            label = { Text("Base URL") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = { Text("https://open.bigmodel.cn/api/paas/v4") }
-        )
-        
-        // Model Name 设置
-        OutlinedTextField(
-            value = uiState.modelName,
-            onValueChange = { viewModel.updateModelName(it) },
-            label = { Text("Model Name") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = { Text("autoglm-phone") }
-        )
-        
-        // 保存按钮
-        Button(
-            onClick = { viewModel.saveSettings() },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !uiState.isLoading
-        ) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp
-                )
-            } else {
-                Text("保存设置")
-            }
-        }
-        
-        // 成功/错误提示
-        uiState.saveSuccess?.let {
-            if (it) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Text(
-                        text = "设置已保存",
-                        modifier = Modifier.padding(12.dp),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
-        
-        uiState.error?.let { error ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Row(
+            
+            // API Key 设置（移除）
+            
+            // Base URL 设置（移除）
+            
+            // Model Name 设置（移除）
+            
+            // 保存按钮（移除）
+            
+            // 错误提示
+            if (uiState.error != null) {
+                Text(
+                    text = uiState.error,
+                    color = MaterialTheme.colorScheme.error,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    TextButton(onClick = { viewModel.clearError() }) {
-                        Text("关闭")
-                    }
-                }
+                        .padding(top = 16.dp)
+                )
+            }
+            
+            // 成功提示
+            if (uiState.saveSuccess == true) {
+                Text(
+                    text = "保存成功",
+                    color = Color.Green,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            // 操作说明
+            Text(
+                text = "操作说明：\n\n" +
+                        "1. 请确保无障碍服务已启用\n" +
+                        "2. 点击下方按钮返回对话界面\n" +
+                        "3. 在对话界面输入指令，应用将自动执行",
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            )
+            
+            // 返回按钮
+            Button(
+                onClick = {
+                    navController.navigateUp()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(text = "返回对话")
             }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // 说明文字
-        Text(
-            text = "说明：\n" +
-                    "1. 请先开启无障碍服务\n" +
-                    "2. 在智谱平台申请 API Key\n" +
-                    "3. 填写 API Key 和其他配置\n" +
-                    "4. 保存设置后即可使用",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
