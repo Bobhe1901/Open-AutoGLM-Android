@@ -23,10 +23,10 @@ android {
 
     signingConfigs {
         create("release") {
+            keyAlias = "autoglm2"
             // 直接使用已知的keystore配置，使用正确的相对路径和密码
             storeFile = file("../keystore/autoglm-release-key.jks")
             storePassword = "password123"
-            keyAlias = "autoglm"
             keyPassword = "password123"
         }
     }

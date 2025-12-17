@@ -67,7 +67,7 @@ class PreferencesRepository(private val context: Context) {
     // Base URL
     val baseUrl: Flow<String> = context.dataStore.data
         .map { preferences ->
-            preferences[BASE_URL] ?: "https://ark.cn-beijing.volces.com/api/v3"
+            preferences[BASE_URL] ?: "https://open.bigmodel.cn/api/paas/v4"
         }
     
     suspend fun saveBaseUrl(baseUrl: String) {
@@ -78,14 +78,14 @@ class PreferencesRepository(private val context: Context) {
     
     fun getBaseUrlSync(): String {
         return runBlocking {
-            context.dataStore.data.first()[BASE_URL] ?: "https://ark.cn-beijing.volces.com/api/v3"
+            context.dataStore.data.first()[BASE_URL] ?: "https://open.bigmodel.cn/api/paas/v4"
         }
     }
     
     // Model Name
     val modelName: Flow<String> = context.dataStore.data
         .map { preferences ->
-            preferences[MODEL_NAME] ?: "ep-20240422111045-kxrvb"
+            preferences[MODEL_NAME] ?: "autoglm-phone"
         }
     
     suspend fun saveModelName(modelName: String) {
@@ -96,7 +96,7 @@ class PreferencesRepository(private val context: Context) {
     
     fun getModelNameSync(): String {
         return runBlocking {
-            context.dataStore.data.first()[MODEL_NAME] ?: "ep-20240422111045-kxrvb"
+            context.dataStore.data.first()[MODEL_NAME] ?: "autoglm-phone"
         }
     }
     

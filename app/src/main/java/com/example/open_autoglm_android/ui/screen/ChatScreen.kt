@@ -60,7 +60,7 @@ fun ChatScreen(chatViewModel: ChatViewModel) {
     ) {
         // 顶部工具栏
         TopAppBar(
-            title = { Text("Open AutoGLM") },
+            title = { Text("烧饼手机智能助手") },
             actions = {
                 IconButton(onClick = {
                     if (selectedTab == 0) {

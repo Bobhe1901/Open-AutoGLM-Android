@@ -5,6 +5,7 @@ import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
@@ -26,6 +28,12 @@ fun SettingsScreen(
 ) {
     val uiState = viewModel.uiState.collectAsState().value
     val context = LocalContext.current
+    
+    // 跳转到系统无障碍设置的函数
+    val navigateToAccessibilitySettings = {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        context.startActivity(intent)
+    }
     
     Scaffold(
         topBar = {
@@ -70,26 +78,41 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
-                            Text(
-                                text = if (uiState.isAccessibilityEnabled) {
-                                    "已启用"
-                                } else {
-                                    "未启用"
-                                },
-                                color = if (uiState.isAccessibilityEnabled) {
-                                    Color.Green
-                                } else {
-                                    Color.Red
-                                },
-                                fontSize = 16.sp
-                            )
+                            if (uiState.isAccessibilityEnabled) {
+                                Text(
+                                    text = "已启用",
+                                    color = Color.Green,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            } else {
+                                // 当无障碍服务未启用时，显示可点击的提示
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "未启用",
+                                        color = Color.Red,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        textDecoration = TextDecoration.Underline,
+                                        modifier = Modifier.clickable {
+                                            navigateToAccessibilitySettings()
+                                        }
+                                    )
+                                    Text(
+                                        text = " (点击前往设置)",
+                                        color = Color.Red,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.clickable {
+                                            navigateToAccessibilitySettings()
+                                        }
+                                    )
+                                }
+                            }
                         }
                         Button(
-                            onClick = {
-                                // 跳转到系统无障碍设置
-                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                context.startActivity(intent)
-                            }
+                            onClick = navigateToAccessibilitySettings
                         ) {
                             Text(text = "前往设置")
                         }
