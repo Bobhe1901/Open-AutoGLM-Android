@@ -23,27 +23,11 @@ android {
 
     signingConfigs {
         create("release") {
-            // 读取签名配置（从 local.properties）
-            val keystorePropertiesFile = rootProject.file("local.properties")
-            if (keystorePropertiesFile.exists()) {
-                val props = Properties()
-                keystorePropertiesFile.reader().use {
-                    props.load(it)
-                }
-                
-                val keystorePath = props.getProperty("keystore.path")
-                val keystorePassword = props.getProperty("keystore.password")
-                val keyAliasName = props.getProperty("key.alias")
-                val keyPassword = props.getProperty("key.password")
-                
-                if (!keystorePath.isNullOrBlank() && !keystorePassword.isNullOrBlank() 
-                    && !keyAliasName.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
-                    storeFile = file(keystorePath)
-                    storePassword = keystorePassword
-                    keyAlias = keyAliasName
-                    this.keyPassword = keyPassword
-                }
-            }
+            // 直接使用已知的keystore配置，使用正确的相对路径和密码
+            storeFile = file("../keystore/autoglm-release-key.jks")
+            storePassword = "password123"
+            keyAlias = "autoglm"
+            keyPassword = "password123"
         }
     }
     
@@ -54,16 +38,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 只有在签名配置存在时才使用
-            if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            // 始终使用release签名配置
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             // 为debug版本也添加签名，以便在Android 7.0+上正常安装
-            if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

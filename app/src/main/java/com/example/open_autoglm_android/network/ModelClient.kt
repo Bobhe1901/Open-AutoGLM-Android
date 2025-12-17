@@ -70,7 +70,8 @@ class ModelClient(
             stream = false
         )
         
-        val authHeader = "Bearer $fixedApiKey"
+        // 根据Python示例，直接使用API Key作为认证头，不需要Bearer前缀
+        val authHeader = fixedApiKey
         
         val response = api.chatCompletion(authHeader, request)
         
@@ -306,7 +307,8 @@ class ModelClient(
             stream = false
         )
         
-        val authHeader = "Bearer $fixedApiKey"
+        // 根据Python示例，直接使用API Key作为认证头，不需要Bearer前缀
+        val authHeader = fixedApiKey
         
         val response = api.chatCompletion(authHeader, request)
         

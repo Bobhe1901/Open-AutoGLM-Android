@@ -1,5 +1,6 @@
 package com.example.open_autoglm_android.util
 
+import android.os.Build
 import android.graphics.Bitmap
 import android.util.Log
 
@@ -16,8 +17,8 @@ object BitmapUtils {
             return true
         }
         
-        // 如果 Bitmap 是 HARDWARE 格式，需要先转换
-        val accessibleBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
+        // 如果 Bitmap 是 HARDWARE 格式（API 26+），需要先转换
+        val accessibleBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE) {
             Log.d("BitmapUtils", "转换 HARDWARE Bitmap 为 ARGB_8888")
             bitmap.copy(Bitmap.Config.ARGB_8888, false)
         } else {
