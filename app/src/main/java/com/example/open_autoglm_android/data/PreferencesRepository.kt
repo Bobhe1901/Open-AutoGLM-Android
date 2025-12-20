@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,7 @@ object PreferenceKeys {
     val API_KEY = stringPreferencesKey("api_key")
     val BASE_URL = stringPreferencesKey("base_url")
     val MODEL_NAME = stringPreferencesKey("model_name")
+    val FLOATING_WINDOW_ENABLED = booleanPreferencesKey("floating_window_enabled")
 }
 
 class PreferencesRepository(private val context: Context) {
@@ -30,6 +32,10 @@ class PreferencesRepository(private val context: Context) {
     
     val modelName: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[PreferenceKeys.MODEL_NAME] ?: "autoglm-phone"
+    }
+    
+    val floatingWindowEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.FLOATING_WINDOW_ENABLED] ?: false
     }
     
     suspend fun saveApiKey(apiKey: String) {
@@ -50,6 +56,12 @@ class PreferencesRepository(private val context: Context) {
         }
     }
     
+    suspend fun saveFloatingWindowEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.FLOATING_WINDOW_ENABLED] = enabled
+        }
+    }
+    
     suspend fun getApiKeySync(): String? {
         return context.dataStore.data.map { it[PreferenceKeys.API_KEY] }.firstOrNull()
     }
@@ -64,5 +76,11 @@ class PreferencesRepository(private val context: Context) {
         return context.dataStore.data.map { 
             it[PreferenceKeys.MODEL_NAME] ?: "autoglm-phone"
         }.firstOrNull() ?: "autoglm-phone"
+    }
+    
+    suspend fun getFloatingWindowEnabledSync(): Boolean {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.FLOATING_WINDOW_ENABLED] ?: false
+        }.firstOrNull() ?: false
     }
 }

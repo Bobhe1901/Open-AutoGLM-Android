@@ -62,12 +62,15 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // Enable Java 8+ API desugaring
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "11"
     }
     buildFeatures {
         compose = true
+        aidl = true
     }
 }
 
@@ -77,6 +80,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     
+    // Desugaring
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+
     // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
@@ -102,6 +108,10 @@ dependencies {
     
     // Image Loading
     implementation(libs.coil.compose)
+    
+    // Shizuku SDK for advanced permissions
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
     
     // Testing
     testImplementation(libs.junit)

@@ -27,12 +27,31 @@ class AutoGLMAccessibilityService : AccessibilityService() {
     private val _currentApp = MutableStateFlow<String?>(null)
     val currentApp: StateFlow<String?> = _currentApp.asStateFlow()
     
+    /**
+     * 获取当前活跃应用的包名。
+     * 优先返回最后一次事件捕获的包名，若为空则尝试从当前活跃窗口的根节点主动查询。
+     */
+    val safeCurrentApp: String?
+        get() {
+            val fromEvent = _currentApp.value
+            if (!fromEvent.isNullOrBlank()) return fromEvent
+            
+            // 兜底方案：主动从根节点获取
+            val fromRoot = rootInActiveWindow?.packageName?.toString()
+            Log.d("AutoGLMService", "从 rootInActiveWindow 获取包名: $fromRoot")
+            return fromRoot
+        }
+    
     private val _latestScreenshot = MutableStateFlow<Bitmap?>(null)
     val latestScreenshot: StateFlow<Bitmap?> = _latestScreenshot.asStateFlow()
     
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        // 无障碍服务启动时，如果保活开关已开启，则启动保活服务
+        if (AccessibilityTileService.isKeepAliveEnabled(this)) {
+            KeepAliveService.start(this)
+        }
     }
     
     override fun onDestroy() {
@@ -45,7 +64,9 @@ class AutoGLMAccessibilityService : AccessibilityService() {
             when (it.eventType) {
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                     val packageName = it.packageName?.toString()
-                    _currentApp.value = packageName
+                    if (!packageName.isNullOrBlank()) {
+                        _currentApp.value = packageName
+                    }
                 }
             }
         }
@@ -58,53 +79,71 @@ class AutoGLMAccessibilityService : AccessibilityService() {
     fun takeScreenshot(callback: (Bitmap?) -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
-                Log.d("AutoGLMService", "开始截图...")
-                takeScreenshot(
-                    android.view.Display.DEFAULT_DISPLAY,
-                    mainExecutor,
-                    object : AccessibilityService.TakeScreenshotCallback {
-                        override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
-                            Log.d("AutoGLMService", "截图成功")
-                            try {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                    val hardwareBuffer = result.hardwareBuffer
-                                    val hardwareBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
-                                    hardwareBuffer?.close()
+                Log.d("AutoGLMService", "开始截图前隐藏悬浮窗...")
+                // 截图前隐藏悬浮窗
+                FloatingWindowService.getInstance()?.setVisibility(false)
+                
+                // 给系统一点点时间处理 UI 隐藏（通常 50ms 足够）
+                mainExecutor.execute {
+                    try {
+                        takeScreenshot(
+                            android.view.Display.DEFAULT_DISPLAY,
+                            mainExecutor,
+                            object : AccessibilityService.TakeScreenshotCallback {
+                                override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                                    // 截图成功后立即恢复悬浮窗
+                                    FloatingWindowService.getInstance()?.setVisibility(true)
+                                    Log.d("AutoGLMService", "截图成功")
                                     
-                                    // 将 HARDWARE 格式的 Bitmap 转换为可访问的格式
-                                    val bitmap = if (hardwareBitmap != null && hardwareBitmap.config == Bitmap.Config.HARDWARE) {
-                                        // 转换为 ARGB_8888 格式以便访问像素
-                                        hardwareBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                                    } else {
-                                        hardwareBitmap
+                                    try {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                            val hardwareBuffer = result.hardwareBuffer
+                                            val hardwareBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
+                                            hardwareBuffer?.close()
+                                            
+                                            // 将 HARDWARE 格式的 Bitmap 转换为可访问的格式
+                                            val bitmap = if (hardwareBitmap != null && hardwareBitmap.config == Bitmap.Config.HARDWARE) {
+                                                // 转换为 ARGB_8888 格式以便访问像素
+                                                hardwareBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                                            } else {
+                                                hardwareBitmap
+                                            }
+                                            
+                                            // 回收硬件 Bitmap（如果已转换）
+                                            if (bitmap != hardwareBitmap) {
+                                                hardwareBitmap?.recycle()
+                                            }
+                                            
+                                            _latestScreenshot.value = bitmap
+                                            Log.d("AutoGLMService", "截图转换成功，尺寸: ${bitmap?.width}x${bitmap?.height}, 格式: ${bitmap?.config}")
+                                            callback(bitmap)
+                                        } else {
+                                            Log.w("AutoGLMService", "Android版本不支持")
+                                            callback(null)
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("AutoGLMService", "处理截图失败", e)
+                                        callback(null)
                                     }
-                                    
-                                    // 回收硬件 Bitmap（如果已转换）
-                                    if (bitmap != hardwareBitmap) {
-                                        hardwareBitmap?.recycle()
-                                    }
-                                    
-                                    _latestScreenshot.value = bitmap
-                                    Log.d("AutoGLMService", "截图转换成功，尺寸: ${bitmap?.width}x${bitmap?.height}, 格式: ${bitmap?.config}")
-                                    callback(bitmap)
-                                } else {
-                                    Log.w("AutoGLMService", "Android版本不支持")
+                                }
+                                
+                                override fun onFailure(errorCode: Int) {
+                                    // 截图失败也要恢复悬浮窗
+                                    FloatingWindowService.getInstance()?.setVisibility(true)
+                                    Log.e("AutoGLMService", "截图失败，错误码: $errorCode")
                                     callback(null)
                                 }
-                            } catch (e: Exception) {
-                                Log.e("AutoGLMService", "处理截图失败", e)
-                                callback(null)
                             }
-                        }
-                        
-                        override fun onFailure(errorCode: Int) {
-                            Log.e("AutoGLMService", "截图失败，错误码: $errorCode")
-                            callback(null)
-                        }
+                        )
+                    } catch (e: Exception) {
+                        FloatingWindowService.getInstance()?.setVisibility(true)
+                        Log.e("AutoGLMService", "调用截图API内部失败", e)
+                        callback(null)
                     }
-                )
+                }
             } catch (e: Exception) {
-                Log.e("AutoGLMService", "调用截图API失败", e)
+                FloatingWindowService.getInstance()?.setVisibility(true)
+                Log.e("AutoGLMService", "调用截图逻辑失败", e)
                 callback(null)
             }
         } else {

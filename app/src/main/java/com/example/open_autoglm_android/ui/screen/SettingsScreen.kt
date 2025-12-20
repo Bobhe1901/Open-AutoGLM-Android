@@ -1,10 +1,14 @@
 package com.example.open_autoglm_android.ui.screen
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,15 +17,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
+import com.example.open_autoglm_android.util.AuthHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    onNavigateToAdvancedAuth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val hasWriteSecureSettings = remember { mutableStateOf(false) }
+    
+    // 检查 WRITE_SECURE_SETTINGS 权限状态
+    LaunchedEffect(Unit) {
+        hasWriteSecureSettings.value = AuthHelper.hasWriteSecureSettingsPermission(context)
+    }
     
     // 当屏幕可见时检查服务状态
     LaunchedEffect(Unit) {
@@ -31,6 +43,7 @@ fun SettingsScreen(
     // 使用 DisposableEffect 在每次进入设置页面时刷新状态
     DisposableEffect(Unit) {
         viewModel.checkAccessibilityService()
+        viewModel.checkOverlayPermission()
         onDispose { }
     }
     
@@ -96,8 +109,119 @@ fun SettingsScreen(
             }
         }
         
+        // 悬浮窗设置
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (uiState.floatingWindowEnabled && uiState.hasOverlayPermission) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                }
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "悬浮窗",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = if (!uiState.hasOverlayPermission) {
+                                "需要悬浮窗权限"
+                            } else if (uiState.floatingWindowEnabled) {
+                                "已启用 - 显示任务状态"
+                            } else {
+                                "未启用"
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    
+                    if (!uiState.hasOverlayPermission) {
+                        Button(
+                            onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                }
+                            }
+                        ) {
+                            Text("授权")
+                        }
+                    } else {
+                        Switch(
+                            checked = uiState.floatingWindowEnabled,
+                            onCheckedChange = { viewModel.setFloatingWindowEnabled(it) }
+                        )
+                    }
+                }
+            }
+        }
+
         Divider()
-        
+
+        // 高级授权与无感保活
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (hasWriteSecureSettings.value) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                }
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "高级授权与无感保活",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = if (hasWriteSecureSettings.value) {
+                                "✓ WRITE_SECURE_SETTINGS 已授权 - 无感保活功能可用"
+                            } else {
+                                "✗ WRITE_SECURE_SETTINGS 未授权 - 点击进入授权页面"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    IconButton(onClick = onNavigateToAdvancedAuth) {
+                        Icon(
+                            Icons.Filled.ArrowForward,
+                            contentDescription = "进入高级授权页面"
+                        )
+                    }
+                }
+            }
+        }
+
+        Divider()
+
         // API Key 设置
         OutlinedTextField(
             value = uiState.apiKey,

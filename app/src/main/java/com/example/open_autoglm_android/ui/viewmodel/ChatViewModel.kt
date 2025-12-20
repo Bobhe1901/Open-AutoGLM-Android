@@ -1,23 +1,30 @@
 package com.example.open_autoglm_android.ui.viewmodel
 
 import android.app.Application
-import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.open_autoglm_android.data.ConversationRepository
 import com.example.open_autoglm_android.data.PreferencesRepository
+import com.example.open_autoglm_android.data.SavedChatMessage
+import com.example.open_autoglm_android.data.Conversation
 import com.example.open_autoglm_android.domain.ActionExecutor
 import com.example.open_autoglm_android.domain.AppRegistry
 import com.example.open_autoglm_android.network.ModelClient
 import com.example.open_autoglm_android.network.dto.ChatMessage as NetworkChatMessage
 import com.example.open_autoglm_android.service.AutoGLMAccessibilityService
+import com.example.open_autoglm_android.service.FloatingWindowService
 import com.example.open_autoglm_android.util.BitmapUtils
 import com.example.open_autoglm_android.util.DeviceUtils
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.yield
+import kotlinx.coroutines.isActive
 
 data class ChatMessage(
     val id: String,
@@ -35,25 +42,32 @@ enum class MessageRole {
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val isLoading: Boolean = false,
+    val isPaused: Boolean = false,
     val error: String? = null,
     val currentApp: String? = null,
-    val taskCompletedMessage: String? = null // 任务完成消息，用于显示 toast
+    val taskCompletedMessage: String? = null,
+    val conversations: List<Conversation> = emptyList(),
+    val currentConversationId: String? = null,
+    val isDrawerOpen: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     private val preferencesRepository = PreferencesRepository(application)
+    private val conversationRepository = ConversationRepository(application)
     
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
     
     private var modelClient: ModelClient? = null
     private var actionExecutor: ActionExecutor? = null
+    private var currentTaskJob: Job? = null
     
-    // 维护对话上下文（消息历史）
+    // 维护对话上下文（消息历史，仅在运行时有效，包含图片等大数据）
     private val messageContext = mutableListOf<NetworkChatMessage>()
     
     init {
+        setupFloatingWindowListeners()
         viewModelScope.launch {
             // 初始化 ModelClient
             val baseUrl = preferencesRepository.getBaseUrlSync()
@@ -65,13 +79,120 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 actionExecutor = ActionExecutor(service)
             }
             
-            // 监听当前应用变化
+            // 监听对话列表变化
+            launch {
+                conversationRepository.conversations.collect { conversations ->
+                    _uiState.value = _uiState.value.copy(conversations = conversations)
+                }
+            }
+            
+            // 监听当前对话变化
+            launch {
+                conversationRepository.currentConversationId.collect { conversationId ->
+                    _uiState.value = _uiState.value.copy(currentConversationId = conversationId)
+                    // 加载对话历史
+                    loadConversationMessages(conversationId)
+                }
+            }
+            
+            // 监听当前应用变化 (UI 实时展示)
             launch {
                 AutoGLMAccessibilityService.getInstance()?.currentApp?.collect { app ->
                     _uiState.value = _uiState.value.copy(currentApp = app)
                 }
             }
+            
+            // 如果没有对话，创建一个默认对话
+            if (conversationRepository.conversations.value.isEmpty()) {
+                conversationRepository.createConversation()
+            }
         }
+    }
+
+    private fun setupFloatingWindowListeners() {
+        FloatingWindowService.onStopClickListener = {
+            stopTask()
+        }
+        FloatingWindowService.onPauseResumeClickListener = {
+            togglePause()
+        }
+    }
+    
+    private fun loadConversationMessages(conversationId: String?) {
+        if (conversationId == null) {
+            _uiState.value = _uiState.value.copy(messages = emptyList())
+            return
+        }
+        
+        val conversation = conversationRepository.getCurrentConversation()
+        if (conversation != null) {
+            val messages = conversation.messages.map { saved ->
+                ChatMessage(
+                    id = saved.id,
+                    role = if (saved.role == "USER") MessageRole.USER else MessageRole.ASSISTANT,
+                    content = saved.content,
+                    thinking = saved.thinking,
+                    action = saved.action,
+                    timestamp = saved.timestamp
+                )
+            }
+            _uiState.value = _uiState.value.copy(messages = messages)
+        }
+    }
+    
+    private suspend fun saveCurrentMessages() {
+        val conversationId = _uiState.value.currentConversationId ?: return
+        val savedMessages = _uiState.value.messages.map { msg ->
+            SavedChatMessage(
+                id = msg.id,
+                role = msg.role.name,
+                content = msg.content,
+                thinking = msg.thinking,
+                action = msg.action,
+                timestamp = msg.timestamp
+            )
+        }
+        conversationRepository.updateConversationMessages(conversationId, savedMessages)
+    }
+    
+    /**
+     * 创建新对话
+     */
+    fun createNewConversation() {
+        viewModelScope.launch {
+            conversationRepository.createConversation()
+            messageContext.clear()
+        }
+    }
+    
+    /**
+     * 切换对话
+     */
+    fun switchConversation(conversationId: String) {
+        conversationRepository.switchConversation(conversationId)
+        messageContext.clear()
+        _uiState.value = _uiState.value.copy(isDrawerOpen = false)
+    }
+    
+    /**
+     * 删除对话
+     */
+    fun deleteConversation(conversationId: String) {
+        viewModelScope.launch {
+            conversationRepository.deleteConversation(conversationId)
+            messageContext.clear()
+        }
+    }
+    
+    /**
+     * 打开/关闭侧边栏
+     */
+    fun toggleDrawer() {
+        _uiState.value = _uiState.value.copy(isDrawerOpen = !_uiState.value.isDrawerOpen)
+    }
+    
+    fun closeDrawer() {
+        _uiState.value = _uiState.value.copy(isDrawerOpen = false)
     }
     
     fun sendMessage(userInput: String) {
@@ -85,12 +206,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         
-        // 自动清理会话：开始新任务前清空 UI 消息和完成提示
+        // 清空当前对话的消息（开始新任务）
         _uiState.value = _uiState.value.copy(
             messages = emptyList(),
             taskCompletedMessage = null,
-            error = null
+            error = null,
+            isPaused = false
         )
+        FloatingWindowService.getInstance()?.updatePauseStatus(false)
         
         val userMessage = ChatMessage(
             id = System.currentTimeMillis().toString(),
@@ -104,7 +227,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             error = null
         )
         
-        viewModelScope.launch {
+        currentTaskJob = viewModelScope.launch {
             try {
                 // 在每次任务开始前，重新加载 AppRegistry，以确保最新的映射配置被加载
                 AppRegistry.initialize(getApplication())
@@ -128,16 +251,48 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // 清空消息上下文，开始新的任务
                 messageContext.clear()
                 
+                // 保存用户消息
+                saveCurrentMessages()
+                
                 // 执行任务循环
                 executeTaskLoop(userInput, modelName, apiKey)
                 
+            } catch (e: CancellationException) {
+                Log.d("ChatViewModel", "任务已取消")
+                FloatingWindowService.getInstance()?.updateStatus("已停止", 0, "用户手动停止")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "错误: ${e.message}"
                 )
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                currentTaskJob = null
             }
         }
+    }
+
+    /**
+     * 停止当前任务
+     */
+    fun stopTask() {
+        currentTaskJob?.cancel()
+        currentTaskJob = null
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            isPaused = false,
+            error = "任务已手动停止"
+        )
+        FloatingWindowService.getInstance()?.updatePauseStatus(false)
+    }
+
+    /**
+     * 暂停/继续任务
+     */
+    fun togglePause() {
+        val newState = !_uiState.value.isPaused
+        _uiState.value = _uiState.value.copy(isPaused = newState)
+        FloatingWindowService.getInstance()?.updatePauseStatus(newState)
     }
     
     private suspend fun executeTaskLoop(userPrompt: String, modelName: String, apiKey: String) {
@@ -151,7 +306,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         var retryCount = 0
         
         while (stepCount < maxSteps) {
+            // 检查暂停状态
+            while (_uiState.value.isPaused) {
+                delay(500)
+                yield() // 检查协程是否已被取消，比直接访问 coroutineContext 更安全
+            }
+
             Log.d("ChatViewModel", "执行步骤 $stepCount")
+            
+            // 更新悬浮窗状态
+            FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "正在截图...")
             
             // 截图
             val screenshot = accessibilityService.takeScreenshotSuspend()
@@ -187,8 +351,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             
-            // 获取当前应用
-            val currentApp = accessibilityService.currentApp.value
+            // 使用 safeCurrentApp 获取当前应用 (包含 rootInActiveWindow 兜底)
+            val currentApp = accessibilityService.safeCurrentApp
             Log.d("ChatViewModel", "当前应用: $currentApp")
             
             // 构建消息上下文
@@ -202,6 +366,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // 后续调用：只添加屏幕信息
                 messageContext.add(client.createScreenInfoMessage(screenshot, currentApp))
             }
+            
+            // 更新悬浮窗状态
+            FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "调用模型...")
             
             // 调用模型（使用消息上下文）
             val messagesList: List<NetworkChatMessage> = messageContext.toList()
@@ -240,20 +407,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 messages = _uiState.value.messages + assistantMessage
             )
             
+            // 保存消息
+            saveCurrentMessages()
+            
             // 如果模型返回的是 finish，则直接结束，不再执行动作
             val isFinishAction = response.action.contains("\"_metadata\":\"finish\"") ||
                 response.action.contains("\"_metadata\": \"finish\"") ||
                 response.action.lowercase().contains("finish(")
-            if (isFinishAction) {
-                val completionMessage = extractFinishMessage(response.action) ?: resultMessageFallback(response.action)
-                //accessibilityService.showToast(completionMessage)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    taskCompletedMessage = completionMessage
-                )
-                Log.d("ChatViewModel", "任务完成(无需执行动作): $completionMessage")
-                return
-            }
+            
+            // 更新悬浮窗状态
+            FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "执行动作...")
             
             // 解析并执行动作
             val result = executor.execute(
@@ -263,18 +426,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             Log.d("ChatViewModel", "动作执行结果: success=${result.success}, message=${result.message}")
             
-            val isFinished = result.message != null && (result.message!!.contains("完成") || 
-                result.message!!.contains("finish")) || 
-                response.action.contains("\"_metadata\":\"finish\"") ||
-                response.action.contains("\"_metadata\": \"finish\"")
-            
-            if (isFinished) {
-                // 任务完成
-                val completionMessage = result.message ?: "任务已完成"
+            if (isFinishAction) {
+                val completionMessage = extractFinishMessage(response.action) ?: result.message ?: resultMessageFallback(response.action)
+                FloatingWindowService.getInstance()?.updateStatus("已完成", stepCount, completionMessage)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     taskCompletedMessage = completionMessage
                 )
+                // 确保返回应用
+                executor.bringAppToForeground()
+                Log.d("ChatViewModel", "任务完成(finish动作): $completionMessage")
+                return
+            }
+            
+            val isFinished = result.message != null && (result.message!!.contains("完成") || 
+                result.message!!.contains("finish"))
+            
+            if (isFinished) {
+                // 任务完成
+                val completionMessage = result.message ?: "任务已完成"
+                FloatingWindowService.getInstance()?.updateStatus("已完成", stepCount, completionMessage)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    taskCompletedMessage = completionMessage
+                )
+                // 确保返回应用
+                executor.bringAppToForeground()
                 Log.d("ChatViewModel", "任务完成: $completionMessage")
                 return
             }
@@ -315,6 +492,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         isLoading = false,
                         error = result.message ?: "执行动作失败"
                     )
+                    // 失败也尝试返回应用
+                    executor.bringAppToForeground()
                     Log.e("ChatViewModel", "重试超过上限，结束流程: ${result.message}")
                     return
                 }
@@ -332,11 +511,52 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             stepCount++
         }
         
+        FloatingWindowService.getInstance()?.updateStatus("已停止", stepCount, "达到最大步数限制")
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             error = "达到最大步数限制"
         )
+        executor.bringAppToForeground()
         Log.w("ChatViewModel", "达到最大步数限制")
+    }
+    
+    /**
+     * 获取当前发送给模型的完整提示词日志
+     */
+    fun getFullPromptLog(): String {
+        // 如果内存中有完整的上下文（带截图信息的），优先展示
+        if (messageContext.isNotEmpty()) {
+            return formatMessageContext(messageContext)
+        }
+        
+        // 如果内存上下文为空，尝试从 UI 消息历史（持久化的）中恢复简版日志
+        val messages = _uiState.value.messages
+        if (messages.isNotEmpty()) {
+            return buildString {
+                append("--- 从历史消息恢复的日志 (不含图片详情) ---\n\n")
+                messages.forEach { msg ->
+                    append("[${msg.role}]:\n")
+                    if (!msg.thinking.isNullOrBlank()) {
+                        append("<thinking>\n${msg.thinking}\n</thinking>\n")
+                    }
+                    append(msg.content)
+                    append("\n\n" + "-".repeat(20) + "\n\n")
+                }
+            }
+        }
+        
+        return ""
+    }
+
+    private fun formatMessageContext(context: List<NetworkChatMessage>): String {
+        return context.joinToString("\n\n" + "-".repeat(20) + "\n\n") { msg ->
+            val role = msg.role.uppercase()
+            val content = msg.content.joinToString("\n") { item ->
+                if (item.type == "text") item.text ?: ""
+                else "[IMAGE CONTENT]"
+            }
+            "[$role]:\n$content"
+        }
     }
     
     /**
@@ -373,15 +593,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * 清理对话历史，开始新的会话
      */
     fun clearMessages() {
-        // 清空消息列表
-        _uiState.value = _uiState.value.copy(
-            messages = emptyList(),
-            error = null,
-            taskCompletedMessage = null
-        )
-        // 清空消息上下文
-        messageContext.clear()
-        Log.d("ChatViewModel", "已清理对话历史，开始新会话")
+        viewModelScope.launch {
+            // 清空消息列表
+            _uiState.value = _uiState.value.copy(
+                messages = emptyList(),
+                error = null,
+                taskCompletedMessage = null
+            )
+            // 清空消息上下文
+            messageContext.clear()
+            // 保存空消息
+            saveCurrentMessages()
+            Log.d("ChatViewModel", "已清理对话历史，开始新会话")
+        }
     }
     
     fun refreshModelClient() {

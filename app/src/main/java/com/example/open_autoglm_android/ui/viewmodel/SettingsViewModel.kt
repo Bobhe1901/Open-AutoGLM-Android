@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.open_autoglm_android.data.PreferencesRepository
+import com.example.open_autoglm_android.service.FloatingWindowService
 import com.example.open_autoglm_android.util.AccessibilityServiceHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +16,8 @@ data class SettingsUiState(
     val baseUrl: String = "https://open.bigmodel.cn/api/paas/v4",
     val modelName: String = "autoglm-phone",
     val isAccessibilityEnabled: Boolean = false,
+    val floatingWindowEnabled: Boolean = false,
+    val hasOverlayPermission: Boolean = false,
     val isLoading: Boolean = false,
     val saveSuccess: Boolean? = null,
     val error: String? = null
@@ -30,6 +33,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     init {
         loadSettings()
         checkAccessibilityService()
+        checkOverlayPermission()
     }
     
     private fun loadSettings() {
@@ -48,6 +52,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _uiState.value = _uiState.value.copy(modelName = modelName ?: "autoglm-phone")
             }
         }
+        viewModelScope.launch {
+            preferencesRepository.floatingWindowEnabled.collect { enabled ->
+                _uiState.value = _uiState.value.copy(floatingWindowEnabled = enabled)
+                updateFloatingWindowService(enabled)
+            }
+        }
     }
     
     fun checkAccessibilityService() {
@@ -57,6 +67,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         // 服务必须在系统设置中启用，并且实例正在运行
         val enabled = enabledInSettings && serviceRunning
         _uiState.value = _uiState.value.copy(isAccessibilityEnabled = enabled)
+    }
+    
+    fun checkOverlayPermission() {
+        val hasPermission = FloatingWindowService.hasOverlayPermission(getApplication())
+        _uiState.value = _uiState.value.copy(hasOverlayPermission = hasPermission)
+    }
+    
+    fun setFloatingWindowEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.saveFloatingWindowEnabled(enabled)
+            _uiState.value = _uiState.value.copy(floatingWindowEnabled = enabled)
+            updateFloatingWindowService(enabled)
+        }
+    }
+    
+    private fun updateFloatingWindowService(enabled: Boolean) {
+        val context = getApplication<Application>()
+        if (enabled && FloatingWindowService.hasOverlayPermission(context)) {
+            FloatingWindowService.startService(context)
+        } else {
+            FloatingWindowService.stopService(context)
+        }
     }
     
     fun updateApiKey(apiKey: String) {
