@@ -11,6 +11,7 @@ import java.util.Locale
 object VoiceRecognitionHelper {
     
     private var speechRecognizer: SpeechRecognizer? = null
+    private var onListeningCallback: ((Boolean) -> Unit)? = null
     
     fun isVoiceRecognitionAvailable(context: Context): Boolean {
         return SpeechRecognizer.isRecognitionAvailable(context)
@@ -22,6 +23,9 @@ object VoiceRecognitionHelper {
         onError: (String) -> Unit,
         onListening: (Boolean) -> Unit
     ) {
+        // 保存回调引用
+        onListeningCallback = onListening
+        
         // 先停止之前的识别
         stopVoiceRecognition()
         
@@ -112,10 +116,14 @@ object VoiceRecognitionHelper {
     
     fun stopVoiceRecognition() {
         speechRecognizer?.apply {
-            // 只停止监听，不销毁实例
-            // 这样可以确保收到最终的识别结果
+            // 停止监听并触发最终结果
             stopListening()
+            
+            // 立即通知UI录音已停止
+            onListeningCallback?.invoke(false)
+            
             // 注意：不要在这里调用destroy()，否则会错过识别结果
+            // 识别结果会在onResults回调中处理，然后在回调中销毁识别器
         }
         // 不要立即设置为null，让它保持活动状态直到收到结果
     }
@@ -125,5 +133,7 @@ object VoiceRecognitionHelper {
             destroy()
         }
         speechRecognizer = null
+        // 清理回调引用
+        onListeningCallback = null
     }
 }
