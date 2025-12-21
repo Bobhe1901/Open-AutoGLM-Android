@@ -149,10 +149,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val accessibilityService = AutoGLMAccessibilityService.getInstance()
                 if (accessibilityService == null) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "无障碍服务未启用，请前往设置开启"
-                    )
+                    Log.e(TAG, "无障碍服务未启用，请前往设置开启")
+                    _uiState.value = _uiState.value.copy(isLoading = false)
                     return@launch
                 }
                 
@@ -186,9 +184,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 executeTaskLoop(messageContent, taskId)
                 
             } catch (e: Exception) {
+                Log.e(TAG, "发送失败：${e.message}", e)
                 _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "发送失败：${e.message}"
+                    isLoading = false
                 )
             }
         }
@@ -230,8 +228,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val accessibilityService = AutoGLMAccessibilityService.getInstance()
                 if (accessibilityService == null) {
                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "无障碍服务未启用，请前往设置开启"
+                        isLoading = false
                     )
                     return@launch
                 }
@@ -266,9 +263,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 executeImageTaskLoop(base64Image, taskId)
                 
             } catch (e: Exception) {
+                Log.e(TAG, "发送失败：${e.message}", e)
                 _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "发送失败：${e.message}"
+                    isLoading = false
                 )
             }
         }
@@ -282,9 +279,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val accessibilityService = AutoGLMAccessibilityService.getInstance()
             if (accessibilityService == null) {
+                Log.e(TAG, "无障碍服务未启用，请前往设置开启")
                 _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "无障碍服务未启用，请前往设置开启"
+                    isLoading = false
                 )
                 return
             }
@@ -323,10 +320,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     apiKey = apiKey
                 )
                 
+                // 处理模型返回
                 if (response == null) {
+                    Log.e(TAG, "模型返回为空，请检查网络连接")
                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "模型返回为空，请检查网络连接"
+                        isLoading = false
                     )
                     return
                 }
@@ -377,9 +375,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // 检查动作执行结果
                 if (!result.success) {
+                    Log.e(TAG, "动作执行失败: ${result.message ?: "未知错误"}")
                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "动作执行失败: ${result.message ?: "未知错误"}"
+                        isLoading = false
                     )
                     return
                 }
@@ -422,15 +420,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // 达到最大步骤数
             _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "任务执行步骤过多，请尝试简化任务"
+                isLoading = false
             )
             
         } catch (e: Exception) {
-            Log.e("ChatViewModel", "任务执行异常", e)
+            Log.e(TAG, "任务执行异常", e)
             _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "任务执行异常: ${e.message}"
+                isLoading = false
             )
         }
     }
@@ -443,9 +439,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // 获取初始截图
             val accessibilityService = AutoGLMAccessibilityService.getInstance()
             if (accessibilityService == null) {
+                Log.e(TAG, "无障碍服务未启用，请前往设置开启")
                 _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "无障碍服务未启用，请前往设置开启"
+                    isLoading = false
                 )
                 return
             }
@@ -486,10 +482,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     apiKey = apiKey
                 )
                 
+                // 处理模型返回
                 if (response == null) {
+                    Log.e(TAG, "模型返回为空，请检查网络连接")
                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "模型返回为空，请检查网络连接"
+                        isLoading = false
                     )
                     return
                 }
@@ -540,9 +537,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // 检查动作执行结果
                 if (!result.success) {
+                    Log.e(TAG, "动作执行失败: ${result.message ?: "未知错误"}")
                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "动作执行失败: ${result.message ?: "未知错误"}"
+                        isLoading = false
                     )
                     return
                 }
@@ -587,16 +584,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             // 达到最大步骤数
+            Log.e(TAG, "任务执行步骤过多，请尝试简化任务")
             _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "任务执行步骤过多，请尝试简化任务"
+                isLoading = false
             )
             
         } catch (e: Exception) {
-            Log.e("ChatViewModel", "任务执行异常", e)
+            Log.e(TAG, "任务执行异常", e)
             _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "任务执行异常: ${e.message}"
+                isLoading = false
             )
         }
     }

@@ -154,20 +154,6 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
             modifier = Modifier.background(Color.White)
         )
         
-        // 错误提示
-        if (uiState.error != null) {
-            Snackbar(
-                modifier = Modifier.padding(16.dp),
-                action = {
-                    TextButton(onClick = { chatViewModel.clearError() }) {
-                        Text("关闭")
-                    }
-                }
-            ) {
-                Text(uiState.error!!)
-            }
-        }
-        
         // 任务完成提示
         if (uiState.taskCompletedMessage != null) {
             Snackbar(
