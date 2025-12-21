@@ -51,6 +51,7 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     
     var inputText by remember { mutableStateOf("") }
     var isVoiceMode by remember { mutableStateOf(true) }
@@ -77,6 +78,17 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
         }
     }
     
+    // 显示提示信息
+    fun showMessage(message: String) {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = "关闭",
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+    
     // 开始语音识别
     fun startVoiceRecognition() {
         if (!checkRecordPermission()) {
@@ -92,9 +104,7 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
             },
             onError = { errorMessage ->
                 // 显示错误信息
-                coroutineScope.launch {
-                    // 可以在这里添加错误提示
-                }
+                showMessage(errorMessage)
             },
             onListening = { isListening ->
                 // 更新录音状态
@@ -143,276 +153,264 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
         }
     }
     
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F5F5))
-    ) {
-        // 顶部联系人信息栏
-        TopAppBar(
-            title = { Text("大模型手机助手") },
-            modifier = Modifier.background(Color.White)
-        )
-        
-        // 任务完成提示
-        if (uiState.taskCompletedMessage != null) {
-            Snackbar(
-                modifier = Modifier.padding(16.dp),
-                containerColor = Color.Green,
-                action = {
-                    TextButton(onClick = { chatViewModel.clearTaskCompletedMessage() }) {
-                        Text("关闭")
-                    }
-                }
-            ) {
-                Text(uiState.taskCompletedMessage!!)
-            }
-        }
-        
-        // 消息列表
-        LazyColumn(
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0) // 移除所有系统默认padding
+    ) { paddingValues ->
+        Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            state = listState,
-            contentPadding = PaddingValues(12.dp)
+                .fillMaxSize()
+                .background(Color(0xFFF5F5F5))
+                .padding(top = paddingValues.calculateTopPadding()) // 只保留顶部padding
         ) {
-            items(uiState.messages) { message ->
-                ChatMessageItem(message = message)
-                Spacer(modifier = Modifier.height(12.dp))
+            // 顶部联系人信息栏
+            TopAppBar(
+                title = { Text("大模型手机助手") },
+                modifier = Modifier.background(Color.White)
+            )
+            
+            // 任务完成提示
+            if (uiState.taskCompletedMessage != null) {
+                Snackbar(
+                    modifier = Modifier.padding(16.dp),
+                    containerColor = Color.Green,
+                    action = {
+                        TextButton(onClick = { chatViewModel.clearTaskCompletedMessage() }) {
+                            Text("关闭")
+                        }
+                    }
+                ) {
+                    Text(uiState.taskCompletedMessage!!)
+                }
             }
             
-            if (uiState.isLoading) {
-                item {
+            // 消息列表
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                state = listState,
+                contentPadding = PaddingValues(12.dp)
+            ) {
+                items(uiState.messages) { message ->
+                    ChatMessageItem(message = message)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                if (uiState.isLoading) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                }
+            }
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+            ) {
+                // 录音时的提示
+                if (isRecording) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .wrapContentHeight()
                             .padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
-                    }
-                }
-            }
-        }
-        
-        // 输入区域
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White)
-                .padding(8.dp)
-        ) {
-            // 录音时的提示
-            if (isRecording) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        modifier = Modifier
-                            .background(Color(0xFF4A90E2), RoundedCornerShape(24.dp))
-                            .padding(24.dp)
-                            .shadow(4.dp, RoundedCornerShape(24.dp)),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF4A90E2))
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                        Card(
+                            modifier = Modifier
+                                .background(Color(0xFF4A90E2), RoundedCornerShape(24.dp))
+                                .padding(24.dp)
+                                .shadow(4.dp, RoundedCornerShape(24.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF4A90E2))
                         ) {
-                            Text(
-                                "正在录音",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "松手发送，上移取消",
-                                color = Color.White,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            // 简化的波形动画（实际项目中可以使用更复杂的动画）
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
-                                for (i in 0..15) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .height((8 + (i % 5) * 6).dp)
-                                            .background(Color.White, RoundedCornerShape(2.dp))
-                                            .padding(horizontal = 2.dp)
-                                    )
+                                Text(
+                                    "正在录音",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "松手发送，上移取消",
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                // 简化的波形动画（实际项目中可以使用更复杂的动画）
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    for (i in 0..15) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height((8 + (i % 5) * 6).dp)
+                                                .background(Color.White, RoundedCornerShape(2.dp))
+                                                .padding(horizontal = 2.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            
-            if (isVoiceMode) {
-                // 语音输入模式（第三张图片）
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF0F0F0), RoundedCornerShape(22.dp))
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 左侧按钮（切换到文字输入模式）
-                    IconButton(
-                        onClick = { 
-                            isVoiceMode = false
-                        },
+                
+                if (isVoiceMode) {
+                    // 语音输入模式（第三张图片）
+                    Row(
                         modifier = Modifier
-                            .size(40.dp)
+                            .fillMaxWidth()
+                            .background(Color(0xFFF0F0F0), RoundedCornerShape(22.dp))
+                            .padding(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Keyboard, contentDescription = "文字输入", tint = Color.Gray)
-                    }
-                    
-                    // 中间的按住说话按钮
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onPress = {
-                                        // 开始语音识别
-                                        startVoiceRecognition()
-                                        try {
-                                            awaitRelease()
-                                        } finally {
-                                            // 松开时停止语音识别
-                                            stopVoiceRecognition()
-                                        }
-                                    },
-                                    onTap = {
-                                        // 移除点击切换到文字输入模式的逻辑
-                                        // 语音模式现在会保持，除非用户手动切换
-                                    }
-                                )
-                            }
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "按住说话",
-                                color = Color(0xFF333333),
-                                fontSize = 16.sp
-                            )
-                        }
-                    }
-                    
-                    // 右侧按钮1（表情）
-                    IconButton(
-                        onClick = { /* 表情功能 */ },
-                        modifier = Modifier
-                            .size(40.dp)
-                    ) {
-                        Icon(Icons.Default.EmojiEmotions, contentDescription = "表情", tint = Color.Gray)
-                    }
-                    
-                    // 右侧按钮2（加号）
-                    IconButton(
-                        onClick = { /* 更多功能 */ },
-                        modifier = Modifier
-                            .size(40.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "更多", tint = Color.Gray)
-                    }
-                }
-            } else {
-                // 文字输入模式（第一张图片）
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF0F0F0), RoundedCornerShape(22.dp))
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 左侧按钮（切换到语音输入模式）
-                    IconButton(
-                        onClick = { isVoiceMode = true },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = "语音输入", tint = Color.Gray)
-                    }
-                    
-                    // 文字输入框
-                    TextField(
-                        value = inputText,
-                        onValueChange = { value -> inputText = value },
-                        placeholder = { 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "发消息或按住说话...",
-                                    color = Color.Gray,
-                                    fontSize = 14.sp
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(22.dp),
-                        maxLines = 3,
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 40.dp, max = 120.dp), // 允许输入框高度自适应
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Color.Black
-                        ),
-                        textStyle = TextStyle(
-                            fontSize = 14.sp,
-                            color = Color.Black
-                        ),
-                        singleLine = false // 允许多行输入
-                    )
-                    
-                    // 右侧按钮区域
-                    if (inputText.isNotBlank()) {
-                        // 有输入内容时显示发送按钮
+                        // 左侧按钮（切换到文字输入模式）
                         IconButton(
-                            onClick = {
-                                chatViewModel.sendMessage(inputText)
-                                inputText = ""
+                            onClick = { 
+                                isVoiceMode = false
                             },
                             modifier = Modifier
-                                .padding(4.dp)
                                 .size(40.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送", tint = Color(0xFF1976D2))
+                            Icon(Icons.Default.Keyboard, contentDescription = "文字输入", tint = Color.Gray)
                         }
-                    } else {
-                        // 无输入内容时显示表情和加号按钮
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
+                        
+                        // 中间的按住说话按钮
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            // 开始语音识别
+                                            startVoiceRecognition()
+                                            try {
+                                                awaitRelease()
+                                            } finally {
+                                                // 松开时停止语音识别
+                                                stopVoiceRecognition()
+                                            }
+                                        },
+                                        onTap = {
+                                            // 移除点击切换到文字输入模式的逻辑
+                                            // 语音模式现在会保持，除非用户手动切换
+                                        }
+                                    )
+                                }
                         ) {
-                            // 右侧按钮1（表情）
-                            IconButton(
-                                onClick = { /* 表情功能 */ },
+                            Box(
                                 modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "按住说话",
+                                    color = Color(0xFF333333),
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                        
+                        // 右侧按钮（加号）
+                        IconButton(
+                            onClick = { 
+                                // 显示"研发中，敬请期待"提示
+                                showMessage("研发中，敬请期待")
+                            },
+                            modifier = Modifier
+                                .size(40.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "更多", tint = Color.Gray)
+                        }
+                    }
+                } else {
+                    // 文字输入模式（第一张图片）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF0F0F0), RoundedCornerShape(22.dp))
+                            .padding(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 左侧按钮（切换到语音输入模式）
+                        IconButton(
+                            onClick = { isVoiceMode = true },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = "语音输入", tint = Color.Gray)
+                        }
+                        
+                        // 文字输入框
+                        TextField(
+                            value = inputText,
+                            onValueChange = { value -> inputText = value },
+                            placeholder = { 
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "发消息或按住说话...",
+                                        color = Color.Gray,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            },
+                            shape = RoundedCornerShape(22.dp),
+                            maxLines = 3,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 40.dp, max = 120.dp), // 允许输入框高度自适应
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = Color.Black
+                            ),
+                            textStyle = TextStyle(
+                                fontSize = 14.sp,
+                                color = Color.Black
+                            ),
+                            singleLine = false // 允许多行输入
+                        )
+                        
+                        // 右侧按钮区域
+                        if (inputText.isNotBlank()) {
+                            // 有输入内容时显示发送按钮
+                            IconButton(
+                                onClick = {
+                                    chatViewModel.sendMessage(inputText)
+                                    inputText = ""
+                                },
+                                modifier = Modifier
+                                    .padding(4.dp)
                                     .size(40.dp)
                             ) {
-                                Icon(Icons.Default.EmojiEmotions, contentDescription = "表情", tint = Color.Gray)
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送", tint = Color(0xFF1976D2))
                             }
-                            
-                            // 右侧按钮2（加号）
+                        } else {
+                            // 无输入内容时显示加号按钮
                             IconButton(
-                                onClick = { /* 更多功能 */ },
+                                onClick = { 
+                                    // 显示"研发中，敬请期待"提示
+                                    showMessage("研发中，敬请期待")
+                                },
                                 modifier = Modifier
                                     .size(40.dp)
                             ) {
@@ -422,28 +420,28 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
                     }
                 }
             }
-        }
-        
-        // 权限对话框
-        if (showPermissionDialog) {
-            AlertDialog(
-                onDismissRequest = { showPermissionDialog = false },
-                title = { Text("需要录音权限") },
-                text = { Text("此应用需要录音权限来进行语音识别") },
-                confirmButton = {
-                    Button(onClick = {
-                        requestRecordPermission()
-                        showPermissionDialog = false
-                    }) {
-                        Text("授予权限")
+            
+            // 权限对话框
+            if (showPermissionDialog) {
+                AlertDialog(
+                    onDismissRequest = { showPermissionDialog = false },
+                    title = { Text("需要录音权限") },
+                    text = { Text("此应用需要录音权限来进行语音识别") },
+                    confirmButton = {
+                        Button(onClick = {
+                            requestRecordPermission()
+                            showPermissionDialog = false
+                        }) {
+                            Text("授予权限")
+                        }
+                    },
+                    dismissButton = {
+                        Button(onClick = { showPermissionDialog = false }) {
+                            Text("取消")
+                        }
                     }
-                },
-                dismissButton = {
-                    Button(onClick = { showPermissionDialog = false }) {
-                        Text("取消")
-                    }
-                }
-            )
+                )
+            }
         }
     }
 }
