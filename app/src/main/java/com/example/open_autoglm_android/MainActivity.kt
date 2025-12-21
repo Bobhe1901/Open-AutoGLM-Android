@@ -39,9 +39,7 @@ fun MainScreen() {
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            ChatScreen(
-                chatViewModel = chatViewModel
-            )
+            ChatScreen(chatViewModel = chatViewModel)
         }
     }
 }

@@ -1,9 +1,14 @@
+
 package com.example.open_autoglm_android.network
 
 import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
-import com.example.open_autoglm_android.network.dto.*
+import com.example.open_autoglm_android.network.dto.ChatMessage as NetworkChatMessage
+import com.example.open_autoglm_android.network.dto.ChatRequest
+import com.example.open_autoglm_android.network.dto.ChatResponse
+import com.example.open_autoglm_android.network.dto.ContentItem
+import com.example.open_autoglm_android.network.dto.ImageUrl
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -17,17 +22,17 @@ data class ModelResponse(
 )
 
 class ModelClient(
-    baseUrl: String,
-    apiKey: String
+    private val baseUrl: String,
+    private val apiKey: String
 ) {
+    private val TAG = "ModelClient"
     private val api: AutoGLMApi
+    private val json = com.google.gson.Gson()
+    private val finalBaseUrl: String
     
     init {
-        // 硬编码baseUrl
-        val fixedBaseUrl = "https://open.bigmodel.cn/api/paas/v4"
-        
         val loggingInterceptor = HttpLoggingInterceptor { message ->
-            Log.d("ModelClient", message)
+            Log.d("ModelClient-OkHttp", message)
         }.apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
@@ -39,29 +44,31 @@ class ModelClient(
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
         
+        // 确保URL以斜杠结尾
+        this.finalBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        
         val retrofit = Retrofit.Builder()
-            .baseUrl(fixedBaseUrl.ensureTrailingSlash())
+            .baseUrl(this.finalBaseUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
         
         api = retrofit.create(AutoGLMApi::class.java)
+        Log.d(TAG, "ModelClient初始化完成，baseUrl: ${this.finalBaseUrl}")
     }
 
     /**
      * 请求模型（使用消息上下文）
      */
     suspend fun request(
-        messages: List<ChatMessage>,
+        messages: List<NetworkChatMessage>,
         modelName: String,
         apiKey: String
     ): ModelResponse {
-        // 硬编码API Key和Model Name
-        val fixedApiKey = "2b55beee279d437ea8c7460e29bc12b0.X0JeFydsJjZjp4Rf"
-        val fixedModelName = "autoglm-phone"
+        Log.d(TAG, "开始执行request请求，模型: $modelName, 消息数量: ${messages.size}")
         
         val request = ChatRequest(
-            model = fixedModelName,
+            model = modelName,
             messages = messages,
             maxTokens = 3000,
             temperature = 0.0,
@@ -70,35 +77,72 @@ class ModelClient(
             stream = false
         )
         
-        // 根据Python示例，直接使用API Key作为认证头，不需要Bearer前缀
-        val authHeader = fixedApiKey
-        
-        val response = api.chatCompletion(authHeader, request)
-        
-        if (response.isSuccessful && response.body() != null) {
-            val responseBody = response.body()!!
-            val content = responseBody.choices.firstOrNull()?.message?.content ?: ""
-            return parseResponse(content)
+        val authHeader = if (apiKey.isNotEmpty() && apiKey != "EMPTY") {
+            "Bearer $apiKey"
         } else {
-            throw Exception("API request failed: ${response.code()} ${response.message()}")
+            "Bearer EMPTY"
+        }
+        
+        try {
+            Log.d(TAG, "发送API请求到: ${finalBaseUrl}chat/completions")
+            Log.d(TAG, "请求模型: $modelName")
+            Log.d(TAG, "请求消息数量: ${messages.size}")
+            val response = api.chatCompletion(authHeader, request)
+            
+            Log.d(TAG, "API响应状态码: ${response.code()}, 消息: ${response.message()}")
+            
+            if (response.isSuccessful && response.body() != null) {
+                val responseBody = response.body()!!
+                val content = responseBody.choices.firstOrNull()?.message?.content ?: ""
+                Log.d(TAG, "API请求成功，返回内容长度: ${content.length}")
+                return parseResponse(content)
+            } else {
+                // 尝试获取详细的错误信息
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "API请求失败: ${response.code()} ${response.message()}, 错误详情: $errorBody")
+                throw Exception("API request failed: ${response.code()} ${response.message()} - $errorBody")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "API请求异常: ${e.message}", e)
+            throw e
         }
     }
-    
+
     /**
      * 创建系统消息
      */
-    fun createSystemMessage(): ChatMessage {
-        val systemPrompt = buildSystemPrompt()
-        return ChatMessage(
+    fun createSystemMessage(): NetworkChatMessage {
+        val systemContent = """
+你是一个智能Android辅助助手，能够通过分析屏幕截图和用户指令来执行各种任务。你的目标是帮助用户完成他们的请求，通过分析当前屏幕状态并执行适当的操作。
+
+核心指令：
+- 你可以通过do(action=...)格式的指令与系统交互
+- 每次操作后，你会收到新的屏幕截图
+- 任务完成后，使用finish(message="xxx")格式结束任务
+
+可用操作：
+- do(action="Launch", package_name="com.example.app") - 启动指定应用
+- do(action="Tap", element=[x,y]) - 点击屏幕上的特定位置
+- do(action="Type", text="xxx") - 输入文本
+- do(action="Swipe", start=[x1,y1], end=[x2,y2]) - 滑动屏幕
+- do(action="Back") - 返回上一页
+- do(action="Home") - 返回主屏幕
+- do(action="Wait", duration="x seconds") - 等待指定时间
+- finish(message="xxx") - 完成任务
+
+请保持回复简洁明了，专注于完成任务所需的操作。
+        """.trimIndent()
+        
+        return NetworkChatMessage(
             role = "system",
-            content = listOf(ContentItem(type = "text", text = systemPrompt))
+            content = listOf(ContentItem(type = "text", text = systemContent))
         )
     }
     
     /**
      * 创建用户消息（第一次调用，包含原始任务）
      */
-    fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?): ChatMessage {
+    fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?): NetworkChatMessage {
         val userContent = mutableListOf<ContentItem>()
         val screenInfoJson = buildScreenInfo(currentApp)
         val textContent = "$userPrompt\n\n$screenInfoJson"
@@ -116,13 +160,13 @@ class ModelClient(
 
         userContent.add(ContentItem(type = "text", text = textContent))
 
-        return ChatMessage(role = "user", content = userContent)
+        return NetworkChatMessage(role = "user", content = userContent)
     }
     
     /**
      * 创建屏幕信息消息（后续调用，只包含屏幕信息）
      */
-    fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?): ChatMessage {
+    fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?): NetworkChatMessage {
         val userContent = mutableListOf<ContentItem>()
         val screenInfoJson = buildScreenInfo(currentApp)
         val textContent = "** Screen Info **\n\n$screenInfoJson"
@@ -140,18 +184,7 @@ class ModelClient(
 
         userContent.add(ContentItem(type = "text", text = textContent))
 
-        return ChatMessage(role = "user", content = userContent)
-    }
-    
-    /**
-     * 创建助手消息（添加到上下文）
-     */
-    fun createAssistantMessage(thinking: String, action: String): ChatMessage {
-        val content = "<think>$thinking</think><answer>$action</answer>"
-        return ChatMessage(
-            role = "assistant",
-            content = listOf(ContentItem(type = "text", text = content))
-        )
+        return NetworkChatMessage(role = "user", content = userContent)
     }
     
     /**
@@ -159,27 +192,52 @@ class ModelClient(
      */
     private fun buildScreenInfo(currentApp: String?): String {
         val appName = currentApp ?: "Unknown"
-        // 简单 JSON，字段名与旧项目保持一致
-        return """{"current_app": "$appName"}"""
+        return """
+        {
+            "screen_info": {
+                "current_app": "$appName"
+            }
+        }
+        """.trimIndent()
     }
     
     /**
      * 从消息中移除图片内容，只保留文本（节省 token）
      * 参考原项目的 MessageBuilder.remove_images_from_message
      */
-    fun removeImagesFromMessage(message: ChatMessage): ChatMessage {
+    fun removeImagesFromMessage(message: NetworkChatMessage): NetworkChatMessage {
         val textOnlyContent = message.content.filter { it.type == "text" }
-        return ChatMessage(
+        return NetworkChatMessage(
             role = message.role,
             content = textOnlyContent
         )
     }
     
     private fun bitmapToBase64(bitmap: Bitmap): String {
+        // 首先减小图片尺寸，降低分辨率
+        val maxDimension = 800 // 最大边长设为800像素
+        var width = bitmap.width
+        var height = bitmap.height
+        
+        if (width > height && width > maxDimension) {
+            height = (height * maxDimension / width)
+            width = maxDimension
+        } else if (height > maxDimension) {
+            width = (width * maxDimension / height)
+            height = maxDimension
+        }
+        
+        // 创建缩放后的 bitmap
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true)
+        
         val outputStream = ByteArrayOutputStream()
-        // 压缩图片以减少传输大小
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+        // 进一步降低压缩质量
+        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 60, outputStream)
         val byteArray = outputStream.toByteArray()
+        
+        // 添加日志，监控图片大小
+        Log.d(TAG, "图片压缩后大小: ${byteArray.size / 1024} KB, 尺寸: ${width}x${height}")
+        
         return Base64.encodeToString(byteArray, Base64.NO_WRAP)
     }
     
@@ -256,8 +314,8 @@ class ModelClient(
     /**
      * 创建工具消息（添加到上下文）
      */
-    fun createToolMessage(content: String): ChatMessage {
-        return ChatMessage(
+    fun createToolMessage(content: String): NetworkChatMessage {
+        return NetworkChatMessage(
             role = "tool",
             content = listOf(ContentItem(type = "text", text = content))
         )
@@ -267,12 +325,28 @@ class ModelClient(
      * 解析模型响应
      */
     private fun parseResponse(content: String): ModelResponse {
-        // 提取思考和动作部分
+        // 首先尝试使用正则表达式提取<think>和<answer>标签中的内容（原始格式）
         val thinkRegex = "<think>(.*?)</think>".toRegex(RegexOption.DOT_MATCHES_ALL)
         val answerRegex = "<answer>(.*?)</answer>".toRegex(RegexOption.DOT_MATCHES_ALL)
         
-        val think = thinkRegex.find(content)?.groupValues?.get(1)?.trim() ?: ""
-        val action = answerRegex.find(content)?.groupValues?.get(1)?.trim() ?: content
+        var think = thinkRegex.find(content)?.groupValues?.get(1)?.trim() ?: ""
+        var action = answerRegex.find(content)?.groupValues?.get(1)?.trim() ?: ""
+        
+        // 如果没有找到<think>和<answer>标签，检查是否包含do(action=...)格式的内容
+        if (think.isEmpty() && action.isEmpty()) {
+            // 尝试从内容中提取动作部分（以do(action=开头的部分）
+            val actionRegex = "do\\(action=.*?\\)".toRegex(RegexOption.DOT_MATCHES_ALL)
+            val actionMatch = actionRegex.find(content)
+            if (actionMatch != null) {
+                // 动作部分
+                action = actionMatch.value.trim()
+                // 思考部分是动作之前的内容
+                think = content.substring(0, actionMatch.range.start).trim()
+            } else {
+                // 既不是原始格式也不是do(action=...)格式，使用整个内容作为动作
+                action = content
+            }
+        }
         
         return ModelResponse(think, action)
     }
@@ -289,34 +363,64 @@ class ModelClient(
      * 请求模型（使用消息上下文）
      */
     suspend fun chat(
-        messages: List<ChatMessage>,
-        model: String,
+        messages: List<NetworkChatMessage>,
+        modelName: String,
         apiKey: String
     ): ChatResponse? {
-        // 硬编码API Key和Model Name
-        val fixedApiKey = "2b55beee279d437ea8c7460e29bc12b0.X0JeFydsJjZjp4Rf"
-        val fixedModelName = "autoglm-phone"
+        Log.d(TAG, "开始执行chat请求，模型: $modelName, 消息数量: ${messages.size}")
         
+        // 直接使用NetworkChatMessage，因为它已经是ChatMessage的别名
         val request = ChatRequest(
-            model = fixedModelName,
+            model = modelName,
             messages = messages,
-            maxTokens = 3000,
+            maxTokens = 1000, // 减少最大令牌数，避免响应过大
             temperature = 0.0,
             topP = 0.85,
             frequencyPenalty = 0.2,
             stream = false
         )
         
-        // 根据Python示例，直接使用API Key作为认证头，不需要Bearer前缀
-        val authHeader = fixedApiKey
+        val authHeader = "Bearer $apiKey"
         
-        val response = api.chatCompletion(authHeader, request)
+        // 添加详细日志，打印完整请求体
+        val requestJson = json.toJson(request)
+        Log.d(TAG, "发送API请求到: ${baseUrl}chat/completions")
+        Log.d(TAG, "请求体大小: ${requestJson.length} 字符")
+        Log.d(TAG, "请求消息数量: ${request.messages.size}")
+        Log.d(TAG, "Authorization头: $authHeader")
         
-        if (response.isSuccessful && response.body() != null) {
-            return response.body()
-        } else {
-            throw Exception("API request failed: ${response.code()} ${response.message()}")
+        try {
+            val response = api.chatCompletion(authHeader, request)
+            
+            Log.d(TAG, "API响应状态码: ${response.code()}, 消息: ${response.message()}")
+            
+            if (response.isSuccessful && response.body() != null) {
+                Log.d(TAG, "API请求成功，返回响应体")
+                val responseBody = response.body()
+                val responseJson = json.toJson(responseBody)
+                Log.d(TAG, "响应体大小: ${responseJson.length} 字符")
+                return responseBody
+            } else {
+                // 尝试获取详细的错误信息
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "API请求失败: ${response.code()} ${response.message()}, 错误详情: $errorBody")
+                throw Exception("API request failed: ${response.code()} ${response.message()} - $errorBody")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "API请求异常: ${e.message}", e)
+            throw e
         }
+    }
+    
+    /**
+     * 创建助手消息（添加到上下文）
+     */
+    fun createAssistantMessage(thinking: String, action: String): NetworkChatMessage {
+        val content = "<think>$thinking</think><answer>$action</answer>"
+        return NetworkChatMessage(
+            role = "assistant",
+            content = listOf(ContentItem(type = "text", text = content))
+        )
     }
     
     /**
@@ -357,7 +461,41 @@ class ModelClient(
         return candidates.firstOrNull() ?: ""
     }
     
-    private fun String.ensureTrailingSlash(): String {
-        return if (this.endsWith("/")) this else "$this/"
+    /**
+     * 创建用户消息（包含图片）
+     */
+    fun createUserMessageWithImage(userPrompt: String, base64Image: String, currentApp: String?): NetworkChatMessage {
+        val userContent = mutableListOf<ContentItem>()
+        val screenInfoJson = buildScreenInfo(currentApp)
+        val textContent = "$userPrompt\n\n$screenInfoJson"
+
+        // 先放图片，再放文本
+        userContent.add(
+            ContentItem(
+                type = "image_url",
+                imageUrl = ImageUrl(url = "data:image/jpeg;base64,$base64Image")
+            )
+        )
+
+        userContent.add(ContentItem(type = "text", text = textContent))
+
+        return NetworkChatMessage(role = "user", content = userContent)
+    }
+    
+    /**
+     * 从消息中移除图片内容（用于减少消息大小）
+     */
+    private fun removeImagesFromMessage(content: List<ContentItem>): List<ContentItem> {
+        return content.filter { it.type != "image_url" }
+    }
+    
+    /**
+     * 限制消息上下文大小，避免内存占用过高
+     * 注意：此方法现在仅作为工具方法，不作用于内部状态
+     */
+    fun limitMessageContextSize(messages: MutableList<NetworkChatMessage>, maxMessages: Int = 10) {
+        if (messages.size > maxMessages) {
+            messages.retainAll(messages.takeLast(maxMessages))
+        }
     }
 }

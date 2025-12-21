@@ -225,6 +225,14 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
             }
         }
         
+        // 如果都找不到，检查是否是纯文本响应
+        // 纯文本响应通常是模型在解释情况或询问用户，而不是执行具体动作
+        if (trimmed.length > 50 && !trimmed.contains("{") && !trimmed.contains("}")) {
+            // 这可能是一个纯文本响应，不是动作指令
+            Log.d("ActionExecutor", "检测到纯文本响应，长度: ${trimmed.length}")
+            return "{\"_metadata\": \"finish\", \"message\": \"${trimmed.take(200).replace("\"", "\\\"")}...\"}"
+        }
+        
         // 如果都找不到，返回原始文本（让调用者处理错误）
         Log.w("ActionExecutor", "无法提取或修复 JSON，返回原始文本")
         return trimmed
@@ -409,9 +417,9 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
     }
     
     private suspend fun launchApp(actionObj: JsonObject): ExecuteResult {
-        val appName = actionObj.get("app")?.asString ?: return ExecuteResult(
+        val appName = actionObj.get("app")?.asString ?: actionObj.get("package_name")?.asString ?: return ExecuteResult(
             success = false,
-            message = "Launch 操作缺少 app 参数"
+            message = "Launch 操作缺少 app 或 package_name 参数"
         )
         
         return try {

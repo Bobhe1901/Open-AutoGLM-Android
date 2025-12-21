@@ -42,8 +42,8 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
         debug {
-            // 为debug版本也添加签名，以便在Android 7.0+上正常安装
-            signingConfig = signingConfigs.getByName("release")
+            // debug版本不使用签名配置，以便在没有keystore的情况下构建
+            // signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
