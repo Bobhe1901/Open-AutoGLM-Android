@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -36,6 +37,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.open_autoglm_android.service.RecordingForegroundService
 import com.example.open_autoglm_android.utils.VoiceRecognitionHelper
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.MessageRole
@@ -61,18 +63,36 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
     
     // 检查录音权限
     fun checkRecordPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
+        val hasRecordPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
+        
+        // Android 14及以上需要POST_NOTIFICATIONS权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasNotificationPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            return hasRecordPermission && hasNotificationPermission
+        }
+        
+        return hasRecordPermission
     }
     
     // 请求录音权限
     fun requestRecordPermission() {
         if (context is Activity) {
+            val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+            
+            // Android 14及以上添加POST_NOTIFICATIONS权限
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            
             ActivityCompat.requestPermissions(
                 context as Activity,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
+                permissions.toTypedArray(),
                 1001
             )
         }
@@ -96,18 +116,34 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
             return
         }
         
+        // Android 14及以上启动前台服务
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            RecordingForegroundService.start(context)
+        }
+        
         VoiceRecognitionHelper.startVoiceRecognition(
             context = context,
-            onResult = { recognizedText ->
-                // 识别成功，发送消息
-                chatViewModel.sendVoiceMessage(recognizedText)
+            onResult = { text ->
+                // 停止前台服务
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    RecordingForegroundService.stop(context)
+                }
+                
+                if (text.isNotEmpty()) {
+                    chatViewModel.sendMessage(text)
+                } else {
+                    showMessage("未识别到语音")
+                }
             },
-            onError = { errorMessage ->
-                // 显示错误信息
-                showMessage(errorMessage)
+            onError = { error ->
+                // 停止前台服务
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    RecordingForegroundService.stop(context)
+                }
+                
+                showMessage("语音识别失败: $error")
             },
             onListening = { isListening ->
-                // 更新录音状态
                 isRecording = isListening
             }
         )
@@ -420,29 +456,29 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
                     }
                 }
             }
-            
-            // 权限对话框
-            if (showPermissionDialog) {
-                AlertDialog(
-                    onDismissRequest = { showPermissionDialog = false },
-                    title = { Text("需要录音权限") },
-                    text = { Text("此应用需要录音权限来进行语音识别") },
-                    confirmButton = {
-                        Button(onClick = {
-                            requestRecordPermission()
-                            showPermissionDialog = false
-                        }) {
-                            Text("授予权限")
-                        }
-                    },
-                    dismissButton = {
-                        Button(onClick = { showPermissionDialog = false }) {
-                            Text("取消")
-                        }
-                    }
-                )
-            }
         }
+    }
+    
+    // 权限对话框（放在Scaffold外面，确保它在最上层）
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = { Text("需要录音权限") },
+            text = { Text("此应用需要录音权限来进行语音识别") },
+            confirmButton = {
+                Button(onClick = {
+                    requestRecordPermission()
+                    showPermissionDialog = false
+                }) {
+                    Text("授予权限")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showPermissionDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
