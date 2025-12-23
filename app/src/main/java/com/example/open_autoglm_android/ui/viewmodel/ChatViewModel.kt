@@ -598,13 +598,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     private fun extractFinishMessage(action: String): String? {
-        val finishPattern = "\"_metadata\"\\s*:\\s*\"finish\"".toRegex()
+        // 首先检查是否是函数调用格式：finish(message="...")
+        val functionCallPattern = """finish\s*\(\s*message\s*=\s*["']([^"']+)["']\s*\)""".toRegex()
+        val functionMatch = functionCallPattern.find(action)
+        if (functionMatch != null) {
+            return functionMatch.groupValues[1]
+        }
+        
+        // 检查JSON格式
+        val finishPattern = """\"_metadata\"\s*:\s*\"finish\"""".toRegex()
         if (finishPattern.containsMatchIn(action)) {
             // 尝试从JSON中提取message字段
             try {
                 val jsonObject = com.google.gson.JsonParser.parseString(action).asJsonObject
                 if (jsonObject.has("content")) {
                     return jsonObject.get("content").asString
+                }
+                if (jsonObject.has("message")) {
+                    return jsonObject.get("message").asString
                 }
             } catch (e: Exception) {
                 // JSON解析失败，尝试使用原始逻辑

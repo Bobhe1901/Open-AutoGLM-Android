@@ -116,18 +116,14 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
             return
         }
         
-        // Android 14及以上启动前台服务
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            RecordingForegroundService.start(context)
-        }
+        // Android 9及以上启动前台服务（为了兼容所有版本，统一使用startForegroundService）
+        RecordingForegroundService.start(context)
         
         VoiceRecognitionHelper.startVoiceRecognition(
             context = context,
             onResult = { text ->
                 // 停止前台服务
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    RecordingForegroundService.stop(context)
-                }
+                RecordingForegroundService.stop(context)
                 
                 if (text.isNotEmpty()) {
                     chatViewModel.sendMessage(text)
@@ -137,9 +133,7 @@ fun ChatScreen(chatViewModel: ChatViewModel = viewModel()) {
             },
             onError = { error ->
                 // 停止前台服务
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    RecordingForegroundService.stop(context)
-                }
+                RecordingForegroundService.stop(context)
                 
                 showMessage("语音识别失败: $error")
             },

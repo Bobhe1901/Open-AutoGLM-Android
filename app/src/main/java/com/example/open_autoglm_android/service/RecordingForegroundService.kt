@@ -36,6 +36,21 @@ class RecordingForegroundService : Service() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
+        
+        // Android 14+ 需要设置前台服务类型
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            try {
+                // 使用反射调用setForegroundServiceType，以兼容低版本编译
+                val method = this.javaClass.getMethod(
+                    "setForegroundServiceType",
+                    Int::class.javaPrimitiveType
+                )
+                method.invoke(this, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } catch (e: Exception) {
+                // 如果设置失败，不影响服务启动
+                android.util.Log.e("RecordingForegroundService", "设置前台服务类型失败", e)
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
