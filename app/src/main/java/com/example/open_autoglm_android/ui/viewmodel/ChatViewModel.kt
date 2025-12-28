@@ -266,9 +266,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 AppRegistry.initialize(getApplication())
                 
                 // 重新初始化 ModelClient（以防配置变化）
-                val baseUrl = preferencesRepository.getBaseUrlSync()
-                val apiKey = preferencesRepository.getApiKeySync() ?: "EMPTY"
-                val modelName = preferencesRepository.getModelNameSync()
+                // val baseUrl = preferencesRepository.getBaseUrlSync()
+                // val apiKey = preferencesRepository.getApiKeySync() ?: "EMPTY"
+                // val modelName = preferencesRepository.getModelNameSync()
+                
+                //写死参数
+                val baseUrl = "https://open.bigmodel.cn/api/paas/v4"
+                val apiKey = "2b55beee279d437ea8c7460e29bc12b0.X0JeFydsJjZjp4Rf"
+                val modelName = "autoglm-phone"
+
                 
                 if (apiKey == "EMPTY" || apiKey.isEmpty()) {
                     _uiState.value = _uiState.value.copy(

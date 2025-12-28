@@ -162,19 +162,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _uiState.value = _uiState.value.copy(modelName = modelName)
     }
     
-    fun saveSettings() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null, saveSuccess = false)
-            try {
-                preferencesRepository.saveApiKey(_uiState.value.apiKey)
-                preferencesRepository.saveBaseUrl(_uiState.value.baseUrl)
-                preferencesRepository.saveModelName(_uiState.value.modelName)
-                _uiState.value = _uiState.value.copy(isLoading = false, saveSuccess = true)
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "保存失败: ${e.message}")
-            }
-        }
-    }
+     
     
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null, saveSuccess = false)

@@ -10,13 +10,14 @@ plugins {
 android {
     namespace = "com.example.open_autoglm_android"
     compileSdk = 36
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.example.open_autoglm_android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 103
-        versionName = "1.0.3"
+        versionCode = 104
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -38,7 +39,7 @@ android {
                 
                 if (!keystorePath.isNullOrBlank() && !keystorePassword.isNullOrBlank() 
                     && !keyAliasName.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
-                    storeFile = file(keystorePath)
+                    storeFile = rootProject.file(keystorePath)
                     storePassword = keystorePassword
                     keyAlias = keyAliasName
                     this.keyPassword = keyPassword
@@ -54,11 +55,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
-            // 只有在签名配置存在时才使用
-            if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            // 使用 release 签名配置
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
