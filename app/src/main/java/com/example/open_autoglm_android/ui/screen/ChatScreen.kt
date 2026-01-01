@@ -41,6 +41,7 @@ import coil.compose.AsyncImage
 import com.example.open_autoglm_android.data.database.Conversation
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.MessageRole
+import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -50,10 +51,12 @@ import java.util.*
 fun ChatScreen(
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = viewModel(),
+    settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
     var userInput by remember { mutableStateOf("") }
 
@@ -236,8 +239,13 @@ fun ChatScreen(
                     // 非加载中显示发送按钮
                     Button(
                         onClick = {
-                            viewModel.sendMessage(userInput)
-                            userInput = ""
+                            // 校验手机号是否已绑定
+                            if (settingsUiState.boundPhoneNumber.isNullOrEmpty()) {
+                                Toast.makeText(context, "请先在设置中绑定手机号", Toast.LENGTH_SHORT).show()
+                            } else {
+                                viewModel.sendMessage(userInput)
+                                userInput = ""
+                            }
                         },
                         enabled = userInput.isNotBlank()
                     ) { Text("发送") }

@@ -26,6 +26,7 @@ data class SettingsUiState(
     val isImeSelected: Boolean = false,
     val imageCompressionEnabled: Boolean = false,
     val imageCompressionLevel: Int = 50,
+    val boundPhoneNumber: String? = null,
     val isLoading: Boolean = false,
     val saveSuccess: Boolean? = null,
     val error: String? = null
@@ -82,6 +83,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
             }
         }
+        viewModelScope.launch {
+            preferencesRepository.boundPhoneNumber.collect { phoneNumber ->
+                _uiState.value = _uiState.value.copy(boundPhoneNumber = phoneNumber)
+            }
+        }
     }
     
     fun checkAccessibilityService() {
@@ -133,11 +139,22 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             _uiState.value = _uiState.value.copy(imageCompressionEnabled = enabled)
         }
     }
-
     fun setImageCompressionLevel(level: Int) {
         viewModelScope.launch {
             preferencesRepository.saveImageCompressionLevel(level)
-            _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
+        }
+    }
+
+    fun saveBoundPhoneNumber(phoneNumber: String) {
+        viewModelScope.launch {
+            preferencesRepository.saveBoundPhoneNumber(phoneNumber)
+        }
+    }
+
+    fun clearBoundPhoneNumber() {
+        viewModelScope.launch {
+            // 使用空字符串或null来清除绑定的手机号
+            preferencesRepository.saveBoundPhoneNumber("")
         }
     }
     

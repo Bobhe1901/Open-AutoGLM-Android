@@ -24,6 +24,7 @@ object PreferenceKeys {
     val IMAGE_COMPRESSION_ENABLED = booleanPreferencesKey("image_compression_enabled")
     val IMAGE_COMPRESSION_LEVEL = intPreferencesKey("image_compression_level")
     val ENABLED_APPS = stringSetPreferencesKey("enabled_apps")  // 存储已启用应用的包名集合
+    val BOUND_PHONE_NUMBER = stringPreferencesKey("bound_phone_number")  // 存储绑定的手机号
 }
 
 enum class InputMode(val value: Int) {
@@ -68,6 +69,10 @@ class PreferencesRepository(private val context: Context) {
 
     val enabledApps: Flow<Set<String>> = context.dataStore.data.map { preferences ->
         preferences[PreferenceKeys.ENABLED_APPS] ?: emptySet()
+    }
+
+    val boundPhoneNumber: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.BOUND_PHONE_NUMBER]
     }
 
     suspend fun saveApiKey(apiKey: String) {
@@ -120,7 +125,7 @@ class PreferencesRepository(private val context: Context) {
 
     suspend fun toggleAppEnabled(packageName: String, enabled: Boolean) {
         context.dataStore.edit { preferences ->
-            val currentApps =
+            val currentApps = 
                 preferences[PreferenceKeys.ENABLED_APPS]?.toMutableSet() ?: mutableSetOf()
             if (enabled) {
                 currentApps.add(packageName)
@@ -129,6 +134,16 @@ class PreferencesRepository(private val context: Context) {
             }
             preferences[PreferenceKeys.ENABLED_APPS] = currentApps
         }
+    }
+
+    suspend fun saveBoundPhoneNumber(phoneNumber: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.BOUND_PHONE_NUMBER] = phoneNumber
+        }
+    }
+
+    suspend fun getBoundPhoneNumberSync(): String? {
+        return context.dataStore.data.map { it[PreferenceKeys.BOUND_PHONE_NUMBER] }.firstOrNull()
     }
 
     suspend fun getApiKeySync(): String? {
