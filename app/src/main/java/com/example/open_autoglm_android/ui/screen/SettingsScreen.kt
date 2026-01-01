@@ -7,6 +7,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import android.provider.Settings.Secure
+import android.widget.Toast
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -182,8 +183,19 @@ fun SettingsScreen(
                 viewModel.checkAccessibilityService()
                 viewModel.checkOverlayPermission()
                 viewModel.checkImeStatus()
-                // 获取Android ID
-                androidId.value = Secure.getString(context.contentResolver, Secure.ANDROID_ID)
+                
+                // 检查Android版本是否为10或更高
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // 获取Android ID
+                    androidId.value = Secure.getString(context.contentResolver, Secure.ANDROID_ID)
+                } else {
+                    // 版本低于Android 10，显示提示
+                    Toast.makeText(
+                        context,
+                        "系统不支持，仅支持安卓10+请升级操作系统版本",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
@@ -395,7 +407,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "若修改请联系管理员",
+                        text = "限绑定1台安卓设备,若修改设备请联系管理员",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
