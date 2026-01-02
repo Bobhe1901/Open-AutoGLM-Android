@@ -118,12 +118,24 @@ fun SettingsScreen(
 
     // 绑定按钮点击事件
     fun onBindClick() {
+        // 手机号格式校验函数
+        fun isPhoneNumberValid(phone: String): Boolean {
+            // 中国手机号正则表达式：1开头，11位数字
+            val phoneRegex = Regex("^1[3-9]\\d{9}$")
+            return phoneRegex.matches(phone)
+        }
         scope.launch {
             val phone = phoneNumber.value.trim()
             val androidIdValue = androidId.value
 
             if (phone.isEmpty() || androidIdValue.isNullOrEmpty()) {
                 bindingResult.value = "请输入手机号并确保已获取Android ID"
+                return@launch
+            }
+
+            // 手机号格式校验
+            if (!isPhoneNumberValid(phone)) {
+                bindingResult.value = "请输入正确的手机号格式"
                 return@launch
             }
 
