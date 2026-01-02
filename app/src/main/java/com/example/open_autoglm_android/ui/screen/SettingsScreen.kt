@@ -15,6 +15,7 @@ import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -89,7 +90,7 @@ fun SettingsScreen(
     val bindingResult = remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    // 创建OkHttp客户端，添加日志拦截器
+    // 创建OkHttp客户端，添加日志拦截器并配置https支持
     val okHttpClient = remember {
         val logging = HttpLoggingInterceptor()
         logging.level = HttpLoggingInterceptor.Level.BODY
@@ -99,13 +100,15 @@ fun SettingsScreen(
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            // 配置TLS版本支持
+            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
             .build()
     }
 
     // 创建Retrofit实例
     val retrofit = remember {
         Retrofit.Builder()
-            .baseUrl("http://192.168.31.167:5500")
+            .baseUrl("https://shaobing.finmind.net.cn")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -374,7 +377,7 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "绑定购买的手机号", style = MaterialTheme.typography.titleMedium)
+                        Text(text = "绑定手机号", style = MaterialTheme.typography.titleMedium)
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -382,7 +385,7 @@ fun SettingsScreen(
                     TextField(
                         value = phoneNumber.value,
                         onValueChange = { phoneNumber.value = it },
-                        placeholder = { Text("请输入购买的手机号") },
+                        placeholder = { Text("请输入手机号") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = TextFieldDefaults.colors(

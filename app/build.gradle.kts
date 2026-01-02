@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.open_autoglm_android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 104
-        versionName = "1.4"
+        versionCode = 106
+        versionName = "1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
